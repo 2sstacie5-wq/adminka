@@ -377,3 +377,127 @@
             openModalKey = key;
             renderModal();
           });
+          cell.appendChild(bonusBtn);
+        }
+
+        daysGrid.appendChild(cell);
+      }
+      card.appendChild(daysGrid);
+
+      monthsEl.appendChild(card);
+    }
+  }
+
+  function renderModal() {
+    const root = document.getElementById("modalRoot");
+    if (!root) return;
+    if (!openModalKey) { root.innerHTML = ""; return; }
+
+    const key = openModalKey;
+    const [y, m] = key.split("-").map(Number);
+    const year = y, month = m - 1;
+    const assigned = state.data[key];
+    if (assigned !== "A" && assigned !== "B" && assigned !== "C") { openModalKey = null; root.innerHTML = ""; return; }
+
+    const totals = computeMonthTotals(year, month);
+    const count = assigned === "A" ? totals.countA : assigned === "B" ? totals.countB : totals.countC;
+    const managerName = nameFor(assigned);
+    const checks = state.bonus[key] || {};
+
+    const rowsHtml = BONUS_CRITERIA.map((c) => {
+      const perDay = count ? c.weight / count : 0;
+      const isChecked = !!checks[c.key];
+      return `
+        <label class="bonus-row ${isEditMode ? "" : "disabled"}">
+          <input type="checkbox" data-crit="${c.key}" ${isChecked ? "checked" : ""} ${isEditMode ? "" : "disabled"} />
+          <span class="bonus-row-label">${c.label}</span>
+          <span class="bonus-row-value">+${fmtMoney(perDay)} грн</span>
+        </label>
+      `;
+    }).join("");
+
+    const dayEarned = BONUS_CRITERIA.reduce((sum, c) => {
+      if (checks[c.key] && count) return sum + c.weight / count;
+      return sum;
+    }, 0);
+
+    root.innerHTML = `
+      <div class="modal-overlay" id="modalOverlay">
+        <div class="modal-card">
+          <h3>${key} — ${managerName}</h3>
+          <p class="muted" style="margin-top:-4px;">Бонус за день ділиться на ${count || "?"} робочих дн. цього місяця для ${managerName}.</p>
+          ${rowsHtml}
+          <div class="modal-total">Разом за цей день: <strong>+${fmtMoney(dayEarned)} грн</strong></div>
+          <button class="btn-close" id="modalCloseBtn">Закрити</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById("modalOverlay").addEventListener("click", (e) => {
+      if (e.target.id === "modalOverlay") { openModalKey = null; renderModal(); }
+    });
+    document.getElementById("modalCloseBtn").addEventListener("click", () => { openModalKey = null; renderModal(); });
+
+    if (isEditMode) {
+      root.querySelectorAll('input[type="checkbox"][data-crit]').forEach((el) => {
+        el.addEventListener("change", () => {
+          if (!state.bonus[key]) state.bonus[key] = {};
+          state.bonus[key][el.dataset.crit] = el.checked;
+          scheduleSave();
+          renderMonths();
+          renderModal();
+        });
+      });
+    }
+  }
+
+  function render() {
+    renderMonths();
+    renderModal();
+    renderLoginModal();
+  }
+
+  async function poll() {
+    if (saveTimer) return;
+    try {
+      const res = await fetch("/api/schedule");
+      const json = await res.json();
+      const activeEl = document.activeElement;
+      const isTypingName = activeEl && (activeEl.id === "nameA" || activeEl.id === "nameB" || activeEl.id === "nameC");
+      state.data = json.data || {};
+      state.bonus = json.bonus || {};
+      if (!isTypingName) {
+        state.names = json.names || state.names;
+        if (!state.names.c) state.names.c = "Віка";
+      }
+      renderMonths();
+      renderModal();
+      if (!isTypingName) {
+        const nameAInput = document.getElementById("nameA");
+        const nameBInput = document.getElementById("nameB");
+        const nameCInput = document.getElementById("nameC");
+        if (nameAInput) nameAInput.value = state.names.a;
+        if (nameBInput) nameBInput.value = state.names.b;
+        if (nameCInput) nameCInput.value = state.names.c;
+      }
+    } catch (e) { /* ignore transient errors */ }
+  }
+
+  async function boot() {
+    await loadSchedule();
+    if (editPassword) {
+      const ok = await verifyEditPassword(editPassword);
+      if (ok) {
+        isEditMode = true;
+      } else {
+        editPassword = "";
+        sessionStorage.removeItem(EDIT_PW_KEY);
+      }
+    }
+    buildApp();
+    render();
+    pollInterval = setInterval(poll, POLL_MS);
+  }
+
+  boot();
+})();
