@@ -139,7 +139,7 @@
         if (state.data[key] === "B") countB++;
       }
 
-      const RATE_PER_DAY = 800;
+      const RATE_PER_DAY = 900;
       const totals = document.createElement("div");
       totals.className = "totals";
       const payA = (countA * RATE_PER_DAY).toLocaleString("uk-UA");
