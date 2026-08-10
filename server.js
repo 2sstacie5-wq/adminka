@@ -13,9 +13,9 @@ app.get("/api/schedule", (req, res) => {
 });
 
 app.post("/api/schedule", (req, res) => {
-  const { names, data } = req.body || {};
+  const { names, data, bonus } = req.body || {};
   if (!data) return res.status(400).json({ error: "Dati mancanti" });
-  const saved = scheduleStore.writeSchedule({ names, data });
+  const saved = scheduleStore.writeSchedule({ names, data, bonus });
   res.json({ ok: true, saved });
 });
 
