@@ -8,7 +8,7 @@
     { key: "speed", label: "Швидкість відповіді", weight: 800 },
     { key: "crm", label: "CRM без помилок", weight: 800 },
     { key: "resolution", label: "Швидке вирішення проблеми", weight: 800 },
-    { key: "initiative", label: "Ініціативність", weight: 600 },
+{ key: "initiative", label: "Пунктуальність", weight: 600 },
     { key: "chats", label: "Перевірка чатів викладачів", weight: 500 },
   ];
   const BONUS_TOTAL = BONUS_CRITERIA.reduce((sum, c) => sum + c.weight, 0);
