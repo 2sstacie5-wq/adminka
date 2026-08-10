@@ -8,6 +8,9 @@
   --orange-light: #f4ddce;
   --teal: #2f6f6a;
   --teal-light: #dcebe9;
+  --yellow: #c9a227;
+  --yellow-dark: #8a6f1a;
+  --yellow-light: #f6ecc8;
   --off: #d8d3c9;
   --off-dark: #9a9284;
 }
@@ -70,6 +73,7 @@ h1 { font-size: 24px; margin: 0 0 4px 0; }
 .swatch { width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0; }
 .swatch.a { background: var(--orange); }
 .swatch.b { background: var(--teal); }
+.swatch.c { background: var(--yellow); }
 .swatch.off { background: var(--off-dark); }
 
 .legend {
@@ -113,6 +117,7 @@ h1 { font-size: 24px; margin: 0 0 4px 0; }
 .pill.ok { background: #e4f3ea; color: #2c7a4b; }
 .pill.warn { background: var(--orange-light); color: var(--orange-dark); }
 .pill.wallet { background: #e4f3ea; color: #2c7a4b; }
+.pill.wallet-c { background: var(--yellow-light); color: var(--yellow-dark); }
 
 .weekdays, .days {
   display: grid;
@@ -143,6 +148,7 @@ h1 { font-size: 24px; margin: 0 0 4px 0; }
 .day.empty { visibility: hidden; }
 .day.a { background: var(--orange); color: #fff; border-color: var(--orange); font-weight: 700; }
 .day.b { background: var(--teal); color: #fff; border-color: var(--teal); font-weight: 700; }
+.day.c { background: var(--yellow); color: #fff; border-color: var(--yellow); font-weight: 700; }
 .day.off { background: var(--off); color: var(--off-dark); border-color: var(--off); }
 .day.today { outline: 2px solid var(--ink); outline-offset: 1px; }
 
