@@ -6,7 +6,8 @@ const FILE = path.join(DATA_DIR, "schedule.json");
 
 const DEFAULT_SCHEDULE = {
   names: { a: "Маша Т.", b: "Маша І." },
-  data: {},
+  data: {}, // { "2026-08-10": "A" | "B" | "OFF" }
+  bonus: {}, // { "2026-08-10": { speed: true, crm: false, ... } }
 };
 
 function readSchedule() {
@@ -16,6 +17,7 @@ function readSchedule() {
     return {
       names: parsed.names || DEFAULT_SCHEDULE.names,
       data: parsed.data || {},
+      bonus: parsed.bonus || {},
     };
   } catch (e) {
     return DEFAULT_SCHEDULE;
@@ -27,6 +29,7 @@ function writeSchedule(obj) {
   const toSave = {
     names: obj.names || DEFAULT_SCHEDULE.names,
     data: obj.data || {},
+    bonus: obj.bonus || {},
   };
   fs.writeFileSync(FILE, JSON.stringify(toSave, null, 2));
   return toSave;
