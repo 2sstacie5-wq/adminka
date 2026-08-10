@@ -58,7 +58,7 @@
         <span class="save-status" id="saveStatus"></span>
       </div>
       <h1>Графік роботи менеджерів italica</h1>
-      <p class="subtitle">Клікай на день, щоб призначити чергування. Ціль — 15 робочих днів на місяць для кожної. Графік спільний — зміни бачать усі, хто відкрив цю сторінку.</p>
+      <p class="subtitle">Клікай на день, щоб призначити чергування. Внизу кожного місяця — кількість робочих днів і сума виплати (800 грн/день) для кожної. Графік спільний — зміни бачать усі, хто відкрив цю сторінку.</p>
 
       <div class="names-row">
         <div class="name-field"><span class="swatch a"></span><input id="nameA" type="text" /></div>
@@ -139,14 +139,17 @@
         if (state.data[key] === "B") countB++;
       }
 
+      const RATE_PER_DAY = 800;
       const totals = document.createElement("div");
       totals.className = "totals";
+      const payA = (countA * RATE_PER_DAY).toLocaleString("uk-UA");
+      const payB = (countB * RATE_PER_DAY).toLocaleString("uk-UA");
       const pillA = document.createElement("span");
-      pillA.className = "pill " + (countA === 15 ? "ok" : "warn");
-      pillA.textContent = `${state.names.a}: ${countA}/15`;
+      pillA.className = "pill wallet";
+      pillA.textContent = `${state.names.a}: ${countA} дн. · ${payA} грн`;
       const pillB = document.createElement("span");
-      pillB.className = "pill " + (countB === 15 ? "ok" : "warn");
-      pillB.textContent = `${state.names.b}: ${countB}/15`;
+      pillB.className = "pill wallet";
+      pillB.textContent = `${state.names.b}: ${countB} дн. · ${payB} грн`;
       totals.appendChild(pillA);
       totals.appendChild(pillB);
       card.appendChild(totals);
