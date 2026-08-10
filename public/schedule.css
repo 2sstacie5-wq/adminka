@@ -274,3 +274,35 @@ h1 { font-size: 24px; margin: 0 0 4px 0; }
   cursor: pointer;
   font-size: 13px;
 }
+/* ---------- Режим перегляду / редагування ---------- */
+.lock-btn {
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #f7f4ee;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.lock-btn.edit {
+  background: #e4f3ea;
+  color: #2c7a4b;
+  border-color: #2c7a4b;
+}
+.day.readonly {
+  cursor: default;
+}
+.bonus-row.disabled {
+  cursor: default;
+  opacity: 0.75;
+}
+.pw-input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  margin: 10px 0;
+  box-sizing: border-box;
+}
