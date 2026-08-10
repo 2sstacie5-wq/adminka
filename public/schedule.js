@@ -3,6 +3,7 @@
   const WEEKDAYS = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
   const POLL_MS = 7000;
   const RATE_PER_DAY = 960;
+  const EDIT_PW_KEY = "adminka_edit_pw";
 
   const BONUS_CRITERIA = [
     { key: "speed", label: "Швидкість відповіді", weight: 800 },
@@ -18,6 +19,10 @@
   let saveStatusEl = null;
   let pollInterval = null;
   let openModalKey = null;
+  let editPassword = sessionStorage.getItem(EDIT_PW_KEY) || "";
+  let isEditMode = false;
+  let showLoginModal = false;
+  let loginError = "";
 
   function dateKey(y, m, d) {
     return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
@@ -43,14 +48,37 @@
     state.bonus = json.bonus || {};
   }
 
+  async function verifyEditPassword(pw) {
+    try {
+      const res = await fetch("/api/verify-edit-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      });
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
   async function saveSchedule() {
     if (saveStatusEl) saveStatusEl.textContent = "Збереження...";
     try {
-      await fetch("/api/schedule", {
+      const res = await fetch("/api/schedule", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-edit-password": editPassword },
         body: JSON.stringify({ names: state.names, data: state.data, bonus: state.bonus }),
       });
+      if (res.status === 401) {
+        isEditMode = false;
+        editPassword = "";
+        sessionStorage.removeItem(EDIT_PW_KEY);
+        if (saveStatusEl) saveStatusEl.textContent = "Сесія редагування закінчилась";
+        alert("Сесія редагування закінчилась. Увійди ще раз, щоб продовжити редагувати.");
+        buildApp();
+        render();
+        return;
+      }
       if (saveStatusEl) saveStatusEl.textContent = "Збережено";
     } catch (e) {
       if (saveStatusEl) saveStatusEl.textContent = "Помилка збереження";
@@ -63,6 +91,7 @@
   }
 
   function cycleState(key) {
+    if (!isEditMode) return;
     const cur = state.data[key];
     let next;
     if (!cur) next = "A";
@@ -114,18 +143,26 @@
 
   function buildApp() {
     const app = document.getElementById("app");
+    const lockHtml = isEditMode
+      ? `<button class="lock-btn edit" id="lockBtn">🔓 Режим редагування · вийти</button>`
+      : `<button class="lock-btn" id="lockBtn">🔒 Перегляд · увійти для редагування</button>`;
+
     app.innerHTML = `
       <div class="topbar">
         <img src="/logo.png" alt="italica" class="logo-img" />
         <span class="save-status" id="saveStatus"></span>
+        ${lockHtml}
       </div>
       <h1>Графік роботи менеджерів italica</h1>
-      <p class="subtitle">Клікай на день, щоб призначити чергування. На призначеному дні з'являється значок € — там можна відмітити виконані критерії та нарахувати бонус (до ${fmtMoney(BONUS_TOTAL)} грн/міс). Графік спільний — зміни бачать усі, хто відкрив цю сторінку.</p>
+      <p class="subtitle">${isEditMode
+        ? "Клікай на день, щоб призначити чергування. На призначеному дні з'являється значок € — там можна відмітити виконані критерії та нарахувати бонус."
+        : "Це режим перегляду — дані видно всім, але змінювати графік і бонуси може тільки той, хто увійшов з паролем."}
+      </p>
 
       <div class="names-row">
-        <div class="name-field"><span class="swatch a"></span><input id="nameA" type="text" /></div>
-        <div class="name-field"><span class="swatch b"></span><input id="nameB" type="text" /></div>
-        <div class="name-field"><span class="swatch c"></span><input id="nameC" type="text" /></div>
+        <div class="name-field"><span class="swatch a"></span><input id="nameA" type="text" ${isEditMode ? "" : "readonly"} /></div>
+        <div class="name-field"><span class="swatch b"></span><input id="nameB" type="text" ${isEditMode ? "" : "readonly"} /></div>
+        <div class="name-field"><span class="swatch c"></span><input id="nameC" type="text" ${isEditMode ? "" : "readonly"} /></div>
       </div>
 
       <div class="legend">
@@ -133,12 +170,12 @@
         <span><span class="swatch b"></span> — робочий день</span>
         <span><span class="swatch c"></span> — операційний директор (заміна)</span>
         <span><span class="swatch off"></span> — вихідний / не призначено</span>
-        <span>Клік по дню: порожньо → перша → друга → директор → вихідний → порожньо</span>
+        ${isEditMode ? `<span>Клік по дню: порожньо → перша → друга → директор → вихідний → порожньо</span>` : ""}
       </div>
 
       <div class="months" id="months"></div>
 
-      <button class="reset-btn" id="resetBtn">Очистити весь графік</button>
+      ${isEditMode ? `<button class="reset-btn" id="resetBtn">Очистити весь графік</button>` : ""}
 
       <p class="instructions">
         Оклад — ${RATE_PER_DAY} грн/робочий день. Бонус (до ${fmtMoney(BONUS_TOTAL)} грн/міс) ділиться на 5 критеріїв і розподіляється по днях залежно від кількості робочих днів у місяці.
@@ -161,9 +198,24 @@
       </div>
 
       <div id="modalRoot"></div>
+      <div id="loginModalRoot"></div>
     `;
 
     saveStatusEl = document.getElementById("saveStatus");
+
+    document.getElementById("lockBtn").addEventListener("click", () => {
+      if (isEditMode) {
+        isEditMode = false;
+        editPassword = "";
+        sessionStorage.removeItem(EDIT_PW_KEY);
+        buildApp();
+        render();
+      } else {
+        showLoginModal = true;
+        loginError = "";
+        renderLoginModal();
+      }
+    });
 
     const nameAInput = document.getElementById("nameA");
     const nameBInput = document.getElementById("nameB");
@@ -171,18 +223,65 @@
     nameAInput.value = state.names.a;
     nameBInput.value = state.names.b;
     nameCInput.value = state.names.c;
-    nameAInput.addEventListener("input", () => { state.names.a = nameAInput.value; scheduleSave(); renderMonths(); });
-    nameBInput.addEventListener("input", () => { state.names.b = nameBInput.value; scheduleSave(); renderMonths(); });
-    nameCInput.addEventListener("input", () => { state.names.c = nameCInput.value; scheduleSave(); renderMonths(); });
+    if (isEditMode) {
+      nameAInput.addEventListener("input", () => { state.names.a = nameAInput.value; scheduleSave(); renderMonths(); });
+      nameBInput.addEventListener("input", () => { state.names.b = nameBInput.value; scheduleSave(); renderMonths(); });
+      nameCInput.addEventListener("input", () => { state.names.c = nameCInput.value; scheduleSave(); renderMonths(); });
+    }
 
-    document.getElementById("resetBtn").addEventListener("click", () => {
-      if (confirm("Точно очистити весь графік і всі бонуси? Це вплине на всіх, хто ним користується.")) {
-        state.data = {};
-        state.bonus = {};
-        scheduleSave();
-        renderMonths();
-      }
+    const resetBtn = document.getElementById("resetBtn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        if (confirm("Точно очистити весь графік і всі бонуси? Це вплине на всіх, хто ним користується.")) {
+          state.data = {};
+          state.bonus = {};
+          scheduleSave();
+          renderMonths();
+        }
+      });
+    }
+  }
+
+  function renderLoginModal() {
+    const root = document.getElementById("loginModalRoot");
+    if (!root) return;
+    if (!showLoginModal) { root.innerHTML = ""; return; }
+
+    root.innerHTML = `
+      <div class="modal-overlay" id="loginOverlay">
+        <div class="modal-card">
+          <h3>Увійти для редагування</h3>
+          ${loginError ? `<p style="color:#c94c4c;font-size:13px;">${loginError}</p>` : ""}
+          <input type="password" id="editPwInput" placeholder="Пароль" class="pw-input" />
+          <button class="btn-close" id="loginSubmitBtn" style="background:var(--orange);color:#fff;border:none;">Увійти</button>
+          <button class="btn-close" id="loginCancelBtn">Скасувати</button>
+        </div>
+      </div>
+    `;
+    const input = document.getElementById("editPwInput");
+    input.focus();
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") submitLogin(); });
+    document.getElementById("loginSubmitBtn").addEventListener("click", submitLogin);
+    document.getElementById("loginCancelBtn").addEventListener("click", () => { showLoginModal = false; renderLoginModal(); });
+    document.getElementById("loginOverlay").addEventListener("click", (e) => {
+      if (e.target.id === "loginOverlay") { showLoginModal = false; renderLoginModal(); }
     });
+
+    async function submitLogin() {
+      const pw = input.value;
+      const ok = await verifyEditPassword(pw);
+      if (ok) {
+        editPassword = pw;
+        sessionStorage.setItem(EDIT_PW_KEY, pw);
+        isEditMode = true;
+        showLoginModal = false;
+        buildApp();
+        render();
+      } else {
+        loginError = "Невірний пароль.";
+        renderLoginModal();
+      }
+    }
   }
 
   function renderMonths() {
@@ -254,6 +353,7 @@
 
         const dayBtn = document.createElement("div");
         dayBtn.className = "day";
+        if (!isEditMode) dayBtn.classList.add("readonly");
         const st = state.data[key];
         if (st === "A") dayBtn.classList.add("a");
         else if (st === "B") dayBtn.classList.add("b");
@@ -270,122 +370,10 @@
           const bonusBtn = document.createElement("button");
           bonusBtn.className = "bonus-btn" + (checkedCount === BONUS_CRITERIA.length ? " full" : checkedCount > 0 ? " partial" : "");
           bonusBtn.type = "button";
-          bonusBtn.title = "Позначити критерії бонусу за цей день";
+          bonusBtn.title = isEditMode ? "Позначити критерії бонусу за цей день" : "Переглянути критерії бонусу за цей день";
           bonusBtn.textContent = "€";
           bonusBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             openModalKey = key;
             renderModal();
           });
-          cell.appendChild(bonusBtn);
-        }
-
-        daysGrid.appendChild(cell);
-      }
-      card.appendChild(daysGrid);
-
-      monthsEl.appendChild(card);
-    }
-  }
-
-  function renderModal() {
-    const root = document.getElementById("modalRoot");
-    if (!root) return;
-    if (!openModalKey) { root.innerHTML = ""; return; }
-
-    const key = openModalKey;
-    const [y, m] = key.split("-").map(Number);
-    const year = y, month = m - 1;
-    const assigned = state.data[key];
-    if (assigned !== "A" && assigned !== "B" && assigned !== "C") { openModalKey = null; root.innerHTML = ""; return; }
-
-    const totals = computeMonthTotals(year, month);
-    const count = assigned === "A" ? totals.countA : assigned === "B" ? totals.countB : totals.countC;
-    const managerName = nameFor(assigned);
-    const checks = state.bonus[key] || {};
-
-    const rowsHtml = BONUS_CRITERIA.map((c) => {
-      const perDay = count ? c.weight / count : 0;
-      const isChecked = !!checks[c.key];
-      return `
-        <label class="bonus-row">
-          <input type="checkbox" data-crit="${c.key}" ${isChecked ? "checked" : ""} />
-          <span class="bonus-row-label">${c.label}</span>
-          <span class="bonus-row-value">+${fmtMoney(perDay)} грн</span>
-        </label>
-      `;
-    }).join("");
-
-    const dayEarned = BONUS_CRITERIA.reduce((sum, c) => {
-      if (checks[c.key] && count) return sum + c.weight / count;
-      return sum;
-    }, 0);
-
-    root.innerHTML = `
-      <div class="modal-overlay" id="modalOverlay">
-        <div class="modal-card">
-          <h3>${key} — ${managerName}</h3>
-          <p class="muted" style="margin-top:-4px;">Бонус за день ділиться на ${count || "?"} робочих дн. цього місяця для ${managerName}.</p>
-          ${rowsHtml}
-          <div class="modal-total">Разом за цей день: <strong>+${fmtMoney(dayEarned)} грн</strong></div>
-          <button class="btn-close" id="modalCloseBtn">Закрити</button>
-        </div>
-      </div>
-    `;
-
-    document.getElementById("modalOverlay").addEventListener("click", (e) => {
-      if (e.target.id === "modalOverlay") { openModalKey = null; renderModal(); }
-    });
-    document.getElementById("modalCloseBtn").addEventListener("click", () => { openModalKey = null; renderModal(); });
-
-    root.querySelectorAll('input[type="checkbox"][data-crit]').forEach((el) => {
-      el.addEventListener("change", () => {
-        if (!state.bonus[key]) state.bonus[key] = {};
-        state.bonus[key][el.dataset.crit] = el.checked;
-        scheduleSave();
-        renderMonths();
-        renderModal();
-      });
-    });
-  }
-
-  function render() {
-    renderMonths();
-    renderModal();
-  }
-
-  async function poll() {
-    if (saveTimer) return;
-    try {
-      const res = await fetch("/api/schedule");
-      const json = await res.json();
-      const activeEl = document.activeElement;
-      const isTypingName = activeEl && (activeEl.id === "nameA" || activeEl.id === "nameB" || activeEl.id === "nameC");
-      state.data = json.data || {};
-      state.bonus = json.bonus || {};
-      if (!isTypingName) {
-        state.names = json.names || state.names;
-        if (!state.names.c) state.names.c = "Віка";
-      }
-      renderMonths();
-      renderModal();
-      if (!isTypingName) {
-        const nameAInput = document.getElementById("nameA");
-        const nameBInput = document.getElementById("nameB");
-        const nameCInput = document.getElementById("nameC");
-        if (nameAInput) nameAInput.value = state.names.a;
-        if (nameBInput) nameBInput.value = state.names.b;
-        if (nameCInput) nameCInput.value = state.names.c;
-      }
-    } catch (e) { /* ignore transient errors */ }
-  }
-
-  async function boot() {
-    await loadSchedule();
-    buildApp();
-    render();
-    pollInterval = setInterval(poll, POLL_MS);
-  }
-
-  boot();
-})();
