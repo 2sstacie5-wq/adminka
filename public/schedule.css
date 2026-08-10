@@ -111,8 +111,7 @@ h1 { font-size: 24px; margin: 0 0 4px 0; }
   border-radius: 999px;
 }
 .pill.ok { background: #e4f3ea; color: #2c7a4b; }
-.pill.warn { background: var(--orange-light); color: var(--orange-dark); }
-
+.pill.wallet { background: #e4f3ea; color: #2c7a4b; }
 .weekdays, .days {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
