@@ -2,7 +2,7 @@
   const MONTH_NAMES = ["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
   const WEEKDAYS = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
   const POLL_MS = 7000;
-  const RATE_PER_DAY = 900;
+  const RATE_PER_DAY = 960;
 
   const BONUS_CRITERIA = [
     { key: "speed", label: "Швидкість відповіді", weight: 800 },
