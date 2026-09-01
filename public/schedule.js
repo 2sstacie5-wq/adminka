@@ -289,11 +289,17 @@
     if (!monthsEl) return;
     monthsEl.innerHTML = "";
 
-    const now = new Date();
+        const now = new Date();
     const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
 
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
+    const START_YEAR = 2026;
+    const START_MONTH = 7; // серпень — місяць, з якого ведеться графік
+    const startIndex = START_YEAR * 12 + START_MONTH;
+    const endIndex = now.getFullYear() * 12 + now.getMonth() + 5;
+    const totalMonths = endIndex - startIndex + 1;
+
+    for (let i = 0; i < totalMonths; i++) {
+      const d = new Date(START_YEAR, START_MONTH + i, 1);
       const year = d.getFullYear();
       const month = d.getMonth();
       const daysInMonth = new Date(year, month + 1, 0).getDate();
