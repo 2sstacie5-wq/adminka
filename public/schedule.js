@@ -2,7 +2,11 @@
   const MONTH_NAMES = ["Січень","Лютий","Березень","Квітень","Травень","Червень","Липень","Серпень","Вересень","Жовтень","Листопад","Грудень"];
   const WEEKDAYS = ["Пн","Вт","Ср","Чт","Пт","Сб","Нд"];
   const POLL_MS = 7000;
-  const RATE_PER_DAY = 960;
+  // Ставка за день: до вересня 2026 включно — 960 грн, з жовтня 2026 — 1000 грн.
+  const RATE_OLD = 960;
+  const RATE_PER_DAY = 1000;
+  const RATE_CHANGE_INDEX = 2026 * 12 + 9; // жовтень 2026
+  function rateFor(year, month) { return year * 12 + month >= RATE_CHANGE_INDEX ? RATE_PER_DAY : RATE_OLD; }
   const EDIT_PW_KEY = "adminka_edit_pw";
 
   const BONUS_CRITERIA = [
@@ -94,7 +98,8 @@
     if (!isEditMode) return;
     const cur = state.data[key];
     let next;
-    if (!cur) next = "A";
+    // Марію (A) прибрано: нові дні їй не призначаються, старі лишаються як були
+    if (!cur) next = "B";
     else if (cur === "A") next = "B";
     else if (cur === "B") next = "C";
     else if (cur === "C") next = "OFF";
@@ -130,9 +135,10 @@
         }
       }
     }
-    const payA = countA * RATE_PER_DAY;
-    const payB = countB * RATE_PER_DAY;
-    const payC = countC * RATE_PER_DAY;
+    const rate = rateFor(year, month);
+    const payA = countA * rate;
+    const payB = countB * rate;
+    const payC = countC * rate;
     return {
       countA, countB, countC,
       payA, payB, payC,
@@ -160,17 +166,16 @@
       </p>
 
       <div class="names-row">
-        <div class="name-field"><span class="swatch a"></span><input id="nameA" type="text" ${isEditMode ? "" : "readonly"} /></div>
+        <input id="nameA" type="hidden" />
         <div class="name-field"><span class="swatch b"></span><input id="nameB" type="text" ${isEditMode ? "" : "readonly"} /></div>
         <div class="name-field"><span class="swatch c"></span><input id="nameC" type="text" ${isEditMode ? "" : "readonly"} /></div>
       </div>
 
       <div class="legend">
-        <span><span class="swatch a"></span> — робочий день</span>
         <span><span class="swatch b"></span> — робочий день</span>
         <span><span class="swatch c"></span> — операційний директор (заміна)</span>
         <span><span class="swatch off"></span> — вихідний / не призначено</span>
-        ${isEditMode ? `<span>Клік по дню: порожньо → перша → друга → директор → вихідний → порожньо</span>` : ""}
+        ${isEditMode ? `<span>Клік по дню: порожньо → ${state.names.b} → директор → вихідний → порожньо</span>` : ""}
       </div>
 
       <div class="months" id="months"></div>
@@ -178,7 +183,7 @@
       ${isEditMode ? `<button class="reset-btn" id="resetBtn">Очистити весь графік</button>` : ""}
 
       <p class="instructions">
-        Оклад — ${RATE_PER_DAY} грн/робочий день. Бонус (до ${fmtMoney(BONUS_TOTAL)} грн/міс) ділиться на 5 критеріїв і розподіляється по днях залежно від кількості робочих днів у місяці.
+        Оклад — ${RATE_PER_DAY} грн/робочий день (до вересня 2026 включно — ${RATE_OLD} грн). Бонус (до ${fmtMoney(BONUS_TOTAL)} грн/міс) ділиться на 5 критеріїв і розподіляється по днях залежно від кількості робочих днів у місяці.
         Графік зберігається на сервері — усі, хто відкриє це посилання, бачать однакові дані. Сторінка оновлюється кожні кілька секунд.
       </p>
 
@@ -325,7 +330,7 @@
       pillB.className = "pill wallet";
       pillB.title = `Оклад: ${fmtMoney(totals.payB)} грн + Бонус: ${fmtMoney(totals.bonusB)} грн`;
       pillB.textContent = `${state.names.b}: ${totals.countB} дн. · ${fmtMoney(totals.totalB)} грн`;
-      totalsEl.appendChild(pillA);
+      if (totals.countA > 0) totalsEl.appendChild(pillA);
       totalsEl.appendChild(pillB);
       if (totals.countC > 0) {
         const pillC = document.createElement("span");

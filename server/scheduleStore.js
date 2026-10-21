@@ -10,9 +10,13 @@ const DEFAULT_SCHEDULE = {
   bonus: {}, // { "2026-08-10": { speed: true, crm: false, ... } }
 };
 
+// Резервна копія в репозиторії: якщо на сервері файлу ще немає (наприклад, після деплою на Render
+// без диска), дані підтягуються з seed/schedule.json.
+const SEED = path.join(__dirname, "..", "seed", "schedule.json");
+
 function readSchedule() {
   try {
-    const raw = fs.readFileSync(FILE, "utf8");
+    const raw = fs.existsSync(FILE) ? fs.readFileSync(FILE, "utf8") : fs.readFileSync(SEED, "utf8");
     const parsed = JSON.parse(raw);
     return {
       names: parsed.names || DEFAULT_SCHEDULE.names,
