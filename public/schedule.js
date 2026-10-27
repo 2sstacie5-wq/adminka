@@ -18,7 +18,16 @@
   ];
   const BONUS_TOTAL = BONUS_CRITERIA.reduce((sum, c) => sum + c.weight, 0);
 
-  let state = { names: { a: "Маша Т.", b: "Маша І.", c: "Віка" }, data: {}, bonus: {} };
+  // Дірект-менеджер: ставка за робочий день + бонус за кожного закритого ліда
+  const DIRECT_RATE = 235;
+  const LEAD_BONUS = 100;
+  const DIRECT_START = 2026 * 12 + 9; // з жовтня 2026
+  const MAX_LEADS = 20;
+  let activeTab = location.hash === "#direct" ? "direct" : "managers";
+  let openLeadKey = null;
+
+  let state = { names: { a: "Маша Т.", b: "Маша І.", c: "Віка" }, data: {}, bonus: {}, direct: { name: "Настя", days: {} } };
+  function normDirect(d) { d = d || {}; return { name: d.name || "Настя", days: d.days || {} }; }
   let saveTimer = null;
   let saveStatusEl = null;
   let pollInterval = null;
@@ -50,6 +59,7 @@
     if (!state.names.c) state.names.c = "Віка";
     state.data = json.data || {};
     state.bonus = json.bonus || {};
+    state.direct = normDirect(json.direct);
   }
 
   async function verifyEditPassword(pw) {
@@ -71,7 +81,7 @@
       const res = await fetch("/api/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-edit-password": editPassword },
-        body: JSON.stringify({ names: state.names, data: state.data, bonus: state.bonus }),
+        body: JSON.stringify({ names: state.names, data: state.data, bonus: state.bonus, direct: state.direct }),
       });
       if (res.status === 401) {
         isEditMode = false;
@@ -159,6 +169,11 @@
         <span class="save-status" id="saveStatus"></span>
         ${lockHtml}
       </div>
+      <nav class="tabs">
+        <button class="tab ${activeTab === "managers" ? "active" : ""}" data-tab="managers">Менеджери</button>
+        <button class="tab ${activeTab === "direct" ? "active" : ""}" data-tab="direct">Дірект-менеджер · ${escapeHtml(state.direct.name)}</button>
+      </nav>
+      ${activeTab === "direct" ? directPageHtml() : `
       <h1>Графік роботи менеджерів italica</h1>
       <p class="subtitle">${isEditMode
         ? "Клікай на день, щоб призначити чергування. На призначеному дні з'являється значок € — там можна відмітити виконані критерії та нарахувати бонус."
@@ -201,12 +216,20 @@
           ${BONUS_CRITERIA.map((c) => `<li>${c.label} — ${fmtMoney(c.weight)} грн/міс</li>`).join("")}
         </ul>
       </div>
+      `}
 
       <div id="modalRoot"></div>
       <div id="loginModalRoot"></div>
     `;
 
     saveStatusEl = document.getElementById("saveStatus");
+    app.querySelectorAll(".tab").forEach((b) => b.addEventListener("click", () => {
+      activeTab = b.dataset.tab;
+      history.replaceState(null, "", activeTab === "direct" ? "#direct" : "#");
+      openModalKey = null; openLeadKey = null;
+      buildApp(); render();
+    }));
+    if (activeTab === "direct") { wireDirect(); return; }
 
     document.getElementById("lockBtn").addEventListener("click", () => {
       if (isEditMode) {
@@ -290,6 +313,7 @@
   }
 
   function renderMonths() {
+    if (activeTab === "direct") return renderDirectMonths();
     const monthsEl = document.getElementById("months");
     if (!monthsEl) return;
     monthsEl.innerHTML = "";
@@ -401,7 +425,7 @@
 
   function renderModal() {
     const root = document.getElementById("modalRoot");
-    if (!root) return;
+    if (!root || activeTab === "direct") return;
     if (!openModalKey) { root.innerHTML = ""; return; }
 
     const key = openModalKey;
@@ -465,7 +489,142 @@
   function render() {
     renderMonths();
     renderModal();
+    renderLeadModal();
     renderLoginModal();
+  }
+
+  /* ---------- Дірект-менеджер ---------- */
+  function escapeHtml(t) { return String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+
+  function directPageHtml() {
+    return `
+      <h1>Дірект-менеджер italica</h1>
+      <p class="subtitle">${isEditMode
+        ? "Клікай на день, щоб позначити робочий день. На робочому дні з'являється кружечок із кількістю закритих лідів — натисни на нього й обери кількість зі списку."
+        : "Це режим перегляду — дані видно всім, але змінювати графік і ліди може тільки той, хто увійшов з паролем."}</p>
+      <div class="names-row">
+        <div class="name-field"><span class="swatch d"></span><input id="nameD" type="text" ${isEditMode ? "" : "readonly"} /></div>
+      </div>
+      <div class="legend">
+        <span><span class="swatch d"></span> — робочий день (${DIRECT_RATE} грн)</span>
+        <span><span class="lead-dot">2</span> — закриті ліди за день (по ${LEAD_BONUS} грн)</span>
+      </div>
+      <div class="months" id="months"></div>
+      <p class="instructions">
+        Ставка — ${DIRECT_RATE} грн за робочий день. Бонус — ${LEAD_BONUS} грн за кожного закритого ліда. Сума за місяць = робочі дні × ${DIRECT_RATE} грн + ліди × ${LEAD_BONUS} грн.
+        Дані зберігаються на сервері разом із графіком менеджерів.
+      </p>`;
+  }
+
+  function wireDirect() {
+    const inp = document.getElementById("nameD");
+    if (!inp) return;
+    inp.value = state.direct.name;
+    if (isEditMode) inp.addEventListener("input", () => {
+      state.direct.name = inp.value;
+      const t = document.querySelector('.tab[data-tab="direct"]');
+      if (t) t.textContent = "Дірект-менеджер · " + inp.value;
+      scheduleSave(); renderDirectMonths();
+    });
+  }
+
+  function directTotals(year, month) {
+    const n = new Date(year, month + 1, 0).getDate();
+    let days = 0, leads = 0;
+    for (let d = 1; d <= n; d++) {
+      const v = state.direct.days[dateKey(year, month, d)];
+      if (v && v.work) days++;
+      if (v && v.leads) leads += v.leads;
+    }
+    return { days, leads, pay: days * DIRECT_RATE, bonus: leads * LEAD_BONUS, total: days * DIRECT_RATE + leads * LEAD_BONUS };
+  }
+
+  function renderDirectMonths() {
+    const monthsEl = document.getElementById("months");
+    if (!monthsEl) return;
+    monthsEl.innerHTML = "";
+    const now = new Date();
+    const todayKey = dateKey(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = now.getFullYear() * 12 + now.getMonth() + 5;
+    for (let idx = DIRECT_START; idx <= end; idx++) {
+      const year = Math.floor(idx / 12), month = idx % 12;
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
+      const t = directTotals(year, month);
+      const card = document.createElement("div");
+      card.className = "month-card";
+      card.innerHTML = `<h2 class="month-title">${MONTH_NAMES[month]} ${year}</h2>
+        <div class="totals">
+          <span class="pill wallet-d" title="Ставка: ${fmtMoney(t.pay)} грн + Ліди: ${fmtMoney(t.bonus)} грн">${escapeHtml(state.direct.name)}: ${t.days} дн. · ${fmtMoney(t.total)} грн</span>
+          <span class="pill lead-pill">ліди: ${t.leads} · +${fmtMoney(t.bonus)} грн</span>
+        </div>
+        <div class="weekdays">${WEEKDAYS.map((w) => `<div>${w}</div>`).join("")}</div>`;
+      const grid = document.createElement("div");
+      grid.className = "days";
+      for (let i = 0; i < firstWeekday; i++) { const e = document.createElement("div"); e.className = "day empty"; grid.appendChild(e); }
+      for (let day = 1; day <= daysInMonth; day++) {
+        const key = dateKey(year, month, day);
+        const v = state.direct.days[key] || {};
+        const cell = document.createElement("div");
+        cell.className = "day-wrap";
+        const btn = document.createElement("div");
+        btn.className = "day" + (v.work ? " dw" : "") + (isEditMode ? "" : " readonly") + (key === todayKey ? " today" : "");
+        btn.textContent = day;
+        btn.addEventListener("click", () => {
+          if (!isEditMode) return;
+          const cur = state.direct.days[key] || {};
+          if (cur.work) { if (cur.leads) state.direct.days[key] = { work: false, leads: cur.leads }; else delete state.direct.days[key]; }
+          else state.direct.days[key] = { work: true, leads: cur.leads || 0 };
+          scheduleSave(); renderDirectMonths();
+        });
+        cell.appendChild(btn);
+        if (v.work || v.leads) {
+          const lb = document.createElement("button");
+          lb.type = "button";
+          lb.className = "lead-btn" + (v.leads ? " has" : "");
+          lb.textContent = v.leads || 0;
+          lb.title = isEditMode ? "Скільки лідів закрито цього дня" : "Закриті ліди за день";
+          lb.addEventListener("click", (e) => { e.stopPropagation(); openLeadKey = key; renderLeadModal(); });
+          cell.appendChild(lb);
+        }
+        grid.appendChild(cell);
+      }
+      card.appendChild(grid);
+      monthsEl.appendChild(card);
+    }
+  }
+
+  function renderLeadModal() {
+    const root = document.getElementById("modalRoot");
+    if (!root || activeTab !== "direct") return;
+    if (!openLeadKey) { root.innerHTML = ""; return; }
+    const key = openLeadKey;
+    const v = state.direct.days[key] || { work: false, leads: 0 };
+    const leads = v.leads || 0;
+    const opts = Array.from({ length: MAX_LEADS + 1 }, (_, n) => `<option value="${n}" ${n === leads ? "selected" : ""}>${n}</option>`).join("");
+    root.innerHTML = `
+      <div class="modal-overlay" id="leadOverlay">
+        <div class="modal-card">
+          <h3>${key} — ${escapeHtml(state.direct.name)}</h3>
+          <p class="muted" style="margin-top:-4px;">${v.work ? "Робочий день: " + DIRECT_RATE + " грн." : "День не позначено як робочий."}</p>
+          <label class="bonus-row ${isEditMode ? "" : "disabled"}">
+            <span class="bonus-row-label">Закритих лідів</span>
+            <select id="leadSel" class="lead-select" ${isEditMode ? "" : "disabled"}>${opts}</select>
+          </label>
+          <div class="modal-total">Бонус за цей день: <strong id="leadSum">+${fmtMoney(leads * LEAD_BONUS)} грн</strong></div>
+          <div class="modal-total">Разом за день: <strong id="daySum">${fmtMoney((v.work ? DIRECT_RATE : 0) + leads * LEAD_BONUS)} грн</strong></div>
+          <button class="btn-close" id="leadCloseBtn">Закрити</button>
+        </div>
+      </div>`;
+    const close = () => { openLeadKey = null; renderLeadModal(); };
+    document.getElementById("leadOverlay").addEventListener("click", (e) => { if (e.target.id === "leadOverlay") close(); });
+    document.getElementById("leadCloseBtn").addEventListener("click", close);
+    if (isEditMode) document.getElementById("leadSel").addEventListener("change", (e) => {
+      const n = Number(e.target.value) || 0;
+      const cur = state.direct.days[key] || { work: false };
+      if (!cur.work && !n) delete state.direct.days[key]; else state.direct.days[key] = { work: !!cur.work, leads: n };
+      scheduleSave(); renderDirectMonths(); renderLeadModal();
+    });
   }
 
   async function poll() {
@@ -477,12 +636,15 @@
       const isTypingName = activeEl && (activeEl.id === "nameA" || activeEl.id === "nameB" || activeEl.id === "nameC");
       state.data = json.data || {};
       state.bonus = json.bonus || {};
+      if (!(activeEl && activeEl.id === "nameD")) state.direct = normDirect(json.direct);
       if (!isTypingName) {
         state.names = json.names || state.names;
         if (!state.names.c) state.names.c = "Віка";
       }
+      if (openLeadKey && document.activeElement && document.activeElement.id === "leadSel") return;
       renderMonths();
       renderModal();
+      renderLeadModal();
       if (!isTypingName) {
         const nameAInput = document.getElementById("nameA");
         const nameBInput = document.getElementById("nameB");

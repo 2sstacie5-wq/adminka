@@ -306,3 +306,18 @@ h1 { font-size: 24px; margin: 0 0 4px 0; }
   margin: 10px 0;
   box-sizing: border-box;
 }
+
+/* ---------- Вкладки та дірект-менеджер ---------- */
+.tabs { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 18px; border-bottom: 1px solid var(--border); }
+.tab { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; font-size: 15px; font-weight: 600; color: var(--muted); cursor: pointer; font-family: inherit; }
+.tab.active { color: var(--ink); border-bottom-color: var(--orange); }
+.tab:hover { color: var(--ink); }
+:root { --purple: #6b4fbb; --purple-light: #ece6fb; --purple-dark: #4b3591; }
+.swatch.d { background: var(--purple); }
+.day.dw { background: var(--purple); color: #fff; border-color: var(--purple); font-weight: 700; }
+.pill.wallet-d { background: var(--purple-light); color: var(--purple-dark); }
+.pill.lead-pill { background: #e4f3ea; color: #2c7a4b; }
+.lead-btn { position: absolute; top: -5px; right: -5px; min-width: 19px; height: 19px; padding: 0 4px; border-radius: 10px; border: 1px solid var(--border); background: #fff; color: var(--muted); font-size: 10px; font-weight: 700; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 2; font-family: inherit; }
+.lead-btn.has { background: #2c7a4b; color: #fff; border-color: #2c7a4b; }
+.lead-dot { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 9px; background: #2c7a4b; color: #fff; font-size: 10px; font-weight: 700; vertical-align: middle; }
+.lead-select { margin-left: auto; font-size: 16px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); font-family: inherit; min-width: 80px; }

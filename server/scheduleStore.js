@@ -22,18 +22,23 @@ function readSchedule() {
       names: parsed.names || DEFAULT_SCHEDULE.names,
       data: parsed.data || {},
       bonus: parsed.bonus || {},
+      direct: parsed.direct || { name: "Настя", days: {} },
     };
   } catch (e) {
-    return DEFAULT_SCHEDULE;
+    return { ...DEFAULT_SCHEDULE, direct: { name: "Настя", days: {} } };
   }
 }
 
 function writeSchedule(obj) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  const prev = readSchedule();
   const toSave = {
     names: obj.names || DEFAULT_SCHEDULE.names,
     data: obj.data || {},
     bonus: obj.bonus || {},
+    // дірект-менеджер: { name, days: { "2026-10-27": { work: true, leads: 2 } } }
+    // якщо старий клієнт не надіслав direct — зберігаємо те, що вже є
+    direct: obj.direct || prev.direct || { name: "Настя", days: {} },
   };
   fs.writeFileSync(FILE, JSON.stringify(toSave, null, 2));
   return toSave;

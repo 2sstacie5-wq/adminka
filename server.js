@@ -26,9 +26,9 @@ app.post("/api/verify-edit-password", (req, res) => {
 });
 
 app.post("/api/schedule", requireEditPassword, (req, res) => {
-  const { names, data, bonus } = req.body || {};
+  const { names, data, bonus, direct } = req.body || {};
   if (!data) return res.status(400).json({ error: "Dati mancanti" });
-  const saved = scheduleStore.writeSchedule({ names, data, bonus });
+  const saved = scheduleStore.writeSchedule({ names, data, bonus, direct });
   res.json({ ok: true, saved });
 });
 
