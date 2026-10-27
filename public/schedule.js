@@ -21,6 +21,7 @@
   // Дірект-менеджер: ставка за робочий день + бонус за кожного закритого ліда
   const DIRECT_RATE = 235;
   const LEAD_BONUS = 100;
+  const CRM_PENALTY = 100; // мінус за невчасно заповнену CRM (за день)
   const DIRECT_START = 2026 * 12 + 9; // з жовтня 2026
   const MAX_LEADS = 20;
   let activeTab = location.hash === "#direct" ? "direct" : "managers";
@@ -229,7 +230,6 @@
       openModalKey = null; openLeadKey = null;
       buildApp(); render();
     }));
-    if (activeTab === "direct") { wireDirect(); return; }
 
     document.getElementById("lockBtn").addEventListener("click", () => {
       if (isEditMode) {
@@ -245,6 +245,7 @@
       }
     });
 
+    if (activeTab === "direct") { wireDirect(); return; }
     const nameAInput = document.getElementById("nameA");
     const nameBInput = document.getElementById("nameB");
     const nameCInput = document.getElementById("nameC");
@@ -500,7 +501,7 @@
     return `
       <h1>Дірект-менеджер italica</h1>
       <p class="subtitle">${isEditMode
-        ? "Клікай на день, щоб позначити робочий день. На робочому дні з'являється кружечок із кількістю закритих лідів — натисни на нього й обери кількість зі списку."
+        ? "Клікай на день, щоб позначити робочий день. На робочому дні з'являється кружечок із кількістю закритих лідів — натисни на нього й обери кількість зі списку. Там же можна позначити невчасно заповнену CRM."
         : "Це режим перегляду — дані видно всім, але змінювати графік і ліди може тільки той, хто увійшов з паролем."}</p>
       <div class="names-row">
         <div class="name-field"><span class="swatch d"></span><input id="nameD" type="text" ${isEditMode ? "" : "readonly"} /></div>
@@ -508,10 +509,11 @@
       <div class="legend">
         <span><span class="swatch d"></span> — робочий день (${DIRECT_RATE} грн)</span>
         <span><span class="lead-dot">2</span> — закриті ліди за день (по ${LEAD_BONUS} грн)</span>
+        <span><span class="swatch d crm-swatch"></span> — CRM заповнено невчасно (−${CRM_PENALTY} грн)</span>
       </div>
       <div class="months" id="months"></div>
       <p class="instructions">
-        Ставка — ${DIRECT_RATE} грн за робочий день. Бонус — ${LEAD_BONUS} грн за кожного закритого ліда. Сума за місяць = робочі дні × ${DIRECT_RATE} грн + ліди × ${LEAD_BONUS} грн.
+        Ставка — ${DIRECT_RATE} грн за робочий день. Бонус — ${LEAD_BONUS} грн за кожного закритого ліда. Мінус ${CRM_PENALTY} грн за кожен день, коли CRM заповнено невчасно (позначка в кружечку дня). Сума за місяць = робочі дні × ${DIRECT_RATE} грн + ліди × ${LEAD_BONUS} грн − дні з невчасною CRM × ${CRM_PENALTY} грн.
         Дані зберігаються на сервері разом із графіком менеджерів.
       </p>`;
   }
@@ -530,13 +532,15 @@
 
   function directTotals(year, month) {
     const n = new Date(year, month + 1, 0).getDate();
-    let days = 0, leads = 0;
+    let days = 0, leads = 0, late = 0;
     for (let d = 1; d <= n; d++) {
       const v = state.direct.days[dateKey(year, month, d)];
       if (v && v.work) days++;
       if (v && v.leads) leads += v.leads;
+      if (v && v.crmLate) late++;
     }
-    return { days, leads, pay: days * DIRECT_RATE, bonus: leads * LEAD_BONUS, total: days * DIRECT_RATE + leads * LEAD_BONUS };
+    const pay = days * DIRECT_RATE, bonus = leads * LEAD_BONUS, penalty = late * CRM_PENALTY;
+    return { days, leads, late, pay, bonus, penalty, total: pay + bonus - penalty };
   }
 
   function renderDirectMonths() {
@@ -555,8 +559,9 @@
       card.className = "month-card";
       card.innerHTML = `<h2 class="month-title">${MONTH_NAMES[month]} ${year}</h2>
         <div class="totals">
-          <span class="pill wallet-d" title="Ставка: ${fmtMoney(t.pay)} грн + Ліди: ${fmtMoney(t.bonus)} грн">${escapeHtml(state.direct.name)}: ${t.days} дн. · ${fmtMoney(t.total)} грн</span>
+          <span class="pill wallet-d" title="Ставка: ${fmtMoney(t.pay)} грн + Ліди: ${fmtMoney(t.bonus)} грн − CRM: ${fmtMoney(t.penalty)} грн">${escapeHtml(state.direct.name)}: ${t.days} дн. · ${fmtMoney(t.total)} грн</span>
           <span class="pill lead-pill">ліди: ${t.leads} · +${fmtMoney(t.bonus)} грн</span>
+          ${t.late ? `<span class="pill crm-pill">CRM невчасно: ${t.late} · −${fmtMoney(t.penalty)} грн</span>` : ""}
         </div>
         <div class="weekdays">${WEEKDAYS.map((w) => `<div>${w}</div>`).join("")}</div>`;
       const grid = document.createElement("div");
@@ -568,17 +573,18 @@
         const cell = document.createElement("div");
         cell.className = "day-wrap";
         const btn = document.createElement("div");
-        btn.className = "day" + (v.work ? " dw" : "") + (isEditMode ? "" : " readonly") + (key === todayKey ? " today" : "");
+        btn.className = "day" + (v.work ? " dw" : "") + (v.crmLate ? " crm-late" : "") + (isEditMode ? "" : " readonly") + (key === todayKey ? " today" : "");
+        if (v.crmLate) btn.title = "CRM заповнено невчасно: −" + CRM_PENALTY + " грн";
         btn.textContent = day;
         btn.addEventListener("click", () => {
           if (!isEditMode) return;
           const cur = state.direct.days[key] || {};
-          if (cur.work) { if (cur.leads) state.direct.days[key] = { work: false, leads: cur.leads }; else delete state.direct.days[key]; }
-          else state.direct.days[key] = { work: true, leads: cur.leads || 0 };
+          if (cur.work) { if (cur.leads || cur.crmLate) state.direct.days[key] = { ...cur, work: false }; else delete state.direct.days[key]; }
+          else state.direct.days[key] = { ...cur, work: true, leads: cur.leads || 0 };
           scheduleSave(); renderDirectMonths();
         });
         cell.appendChild(btn);
-        if (v.work || v.leads) {
+        if (v.work || v.leads || v.crmLate) {
           const lb = document.createElement("button");
           lb.type = "button";
           lb.className = "lead-btn" + (v.leads ? " has" : "");
@@ -611,20 +617,28 @@
             <span class="bonus-row-label">Закритих лідів</span>
             <select id="leadSel" class="lead-select" ${isEditMode ? "" : "disabled"}>${opts}</select>
           </label>
-          <div class="modal-total">Бонус за цей день: <strong id="leadSum">+${fmtMoney(leads * LEAD_BONUS)} грн</strong></div>
-          <div class="modal-total">Разом за день: <strong id="daySum">${fmtMoney((v.work ? DIRECT_RATE : 0) + leads * LEAD_BONUS)} грн</strong></div>
+          <label class="bonus-row ${isEditMode ? "" : "disabled"}">
+            <input type="checkbox" id="crmLate" ${v.crmLate ? "checked" : ""} ${isEditMode ? "" : "disabled"} />
+            <span class="bonus-row-label">CRM заповнено невчасно</span>
+            <span class="bonus-row-value" style="color:#c94c4c">−${CRM_PENALTY} грн</span>
+          </label>
+          <div class="modal-total">Бонус за ліди: <strong id="leadSum">+${fmtMoney(leads * LEAD_BONUS)} грн</strong>${v.crmLate ? ` · штраф CRM: <strong style="color:#c94c4c">−${CRM_PENALTY} грн</strong>` : ""}</div>
+          <div class="modal-total">Разом за день: <strong id="daySum">${fmtMoney((v.work ? DIRECT_RATE : 0) + leads * LEAD_BONUS - (v.crmLate ? CRM_PENALTY : 0))} грн</strong></div>
           <button class="btn-close" id="leadCloseBtn">Закрити</button>
         </div>
       </div>`;
     const close = () => { openLeadKey = null; renderLeadModal(); };
     document.getElementById("leadOverlay").addEventListener("click", (e) => { if (e.target.id === "leadOverlay") close(); });
     document.getElementById("leadCloseBtn").addEventListener("click", close);
-    if (isEditMode) document.getElementById("leadSel").addEventListener("change", (e) => {
-      const n = Number(e.target.value) || 0;
-      const cur = state.direct.days[key] || { work: false };
-      if (!cur.work && !n) delete state.direct.days[key]; else state.direct.days[key] = { work: !!cur.work, leads: n };
+    const store = (patch) => {
+      const cur = { work: false, leads: 0, crmLate: false, ...(state.direct.days[key] || {}), ...patch };
+      if (!cur.work && !cur.leads && !cur.crmLate) delete state.direct.days[key]; else state.direct.days[key] = cur;
       scheduleSave(); renderDirectMonths(); renderLeadModal();
-    });
+    };
+    if (isEditMode) {
+      document.getElementById("leadSel").addEventListener("change", (e) => store({ leads: Number(e.target.value) || 0 }));
+      document.getElementById("crmLate").addEventListener("change", (e) => store({ crmLate: e.target.checked }));
+    }
   }
 
   async function poll() {
